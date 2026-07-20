@@ -2,42 +2,148 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
     <title>Map Sentinel Automation</title>
 
     <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
+    >
 
     <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
-    />
+    >
 
     <link
         rel="stylesheet"
         href="{{ url_for('static', filename='css/style.css') }}"
-    />
+    >
 </head>
+
 <body>
 
-    <div class="container">
-        <h1>Map Sentinel Automation</h1>
-        <p>Draw a polygon to select an area.</p>
+    <main class="page-container">
 
-        <div id="map"></div>
+        <section class="header-section">
+            <p class="eyebrow">Satellite Image Collection</p>
 
-        <div class="info-box">
-            <h3>Selected Coordinates</h3>
-            <pre id="coordinates">No area selected</pre>
-        </div>
-    </div>
+            <h1>Map Sentinel Automation</h1>
+
+            <p>
+                Select an area, choose the date range and export
+                Sentinel-2 imagery to Google Drive.
+            </p>
+        </section>
+
+        <section class="control-panel">
+
+            <div class="form-group">
+                <label for="start-date">Start date</label>
+
+                <input
+                    type="date"
+                    id="start-date"
+                    value="2026-01-01"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="end-date">End date</label>
+
+                <input
+                    type="date"
+                    id="end-date"
+                    value="2026-07-20"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="cloud-percentage">
+                    Maximum cloud percentage
+                </label>
+
+                <input
+                    type="number"
+                    id="cloud-percentage"
+                    value="20"
+                    min="0"
+                    max="100"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="image-type">Image type</label>
+
+                <select id="image-type">
+                    <option value="rgb">
+                        RGB GeoTIFF
+                    </option>
+
+                    <option value="ndvi">
+                        NDVI GeoTIFF
+                    </option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="drive-folder">
+                    Google Drive folder
+                </label>
+
+                <input
+                    type="text"
+                    id="drive-folder"
+                    value="Sentinel_Images"
+                >
+            </div>
+
+            <button
+                type="button"
+                id="export-button"
+                disabled
+            >
+                Export Sentinel Image
+            </button>
+
+        </section>
+
+        <section class="map-section">
+            <div id="map"></div>
+        </section>
+
+        <section class="information-grid">
+
+            <article class="information-card">
+                <h2>Selected Coordinates</h2>
+
+                <pre id="coordinates">No area selected</pre>
+            </article>
+
+            <article class="information-card">
+                <h2>Export Status</h2>
+
+                <div id="status-box" class="status-box idle">
+                    Draw a polygon to begin.
+                </div>
+
+                <div id="result-details"></div>
+            </article>
+
+        </section>
+
+    </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+
 </body>
 </html>
