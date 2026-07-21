@@ -404,6 +404,17 @@ function showResultDetails(data) {
             ? `${cloudValue.toFixed(4)}%`
             : "Not available";
 
+    const exportedBands =
+        Array.isArray(data.exported_bands)
+            ? data.exported_bands.join(", ")
+            : "Not available";
+
+    const exportType =
+        data.export_type ?? "Not available";
+
+    const bandCount =
+        data.band_count ?? "Not available";
+
     resultDetails.innerHTML = `
         <div class="result-row">
             <span>Images found</span>
@@ -418,6 +429,21 @@ function showResultDetails(data) {
         <div class="result-row">
             <span>Cloud percentage</span>
             <strong>${cloudText}</strong>
+        </div>
+
+        <div class="result-row">
+            <span>Export type</span>
+            <strong>${exportType}</strong>
+        </div>
+
+        <div class="result-row">
+            <span>Band count</span>
+            <strong>${bandCount}</strong>
+        </div>
+
+        <div class="result-row">
+            <span>Exported bands</span>
+            <strong>${exportedBands}</strong>
         </div>
 
         <div class="result-row">

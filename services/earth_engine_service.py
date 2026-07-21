@@ -6,6 +6,19 @@ import ee
 PROJECT_ID = "optical-metric-497209-p0"
 DRIVE_FOLDER = "Sentinel_Images"
 
+FINAL_BAND_ORDER = [
+    "B4",
+    "B3",
+    "B2",
+    "NDVI",
+    "EVI",
+    "NBR",
+    "VV",
+    "VH",
+    "VV_VH_ratio",
+    "VV_minus_VH"
+]
+
 
 def initialize_earth_engine():
     try:
@@ -32,7 +45,8 @@ def validate_coordinates(coordinates):
     for point in coordinates:
         if not isinstance(point, list) or len(point) != 2:
             raise ValueError(
-                "প্রতিটি coordinate [longitude, latitude] format-এ হতে হবে।"
+                "প্রতিটি coordinate "
+                "[longitude, latitude] format-এ হতে হবে।"
             )
 
         longitude, latitude = point
@@ -72,6 +86,29 @@ def close_polygon(coordinates):
     return polygon_coordinates
 
 
+def mask_sentinel2(image):
+    """
+    SCL classification ব্যবহার করে cloud, shadow,
+    cirrus এবং snow pixel বাদ দেয়।
+    """
+
+    scl = image.select("SCL")
+
+    mask = (
+        scl.neq(3)
+        .And(scl.neq(8))
+        .And(scl.neq(9))
+        .And(scl.neq(10))
+        .And(scl.neq(11))
+    )
+
+    return (
+        image
+        .updateMask(mask)
+        .select(["B2", "B3", "B4", "B8", "B12"])
+    )
+
+
 def start_sentinel_export(
     coordinates,
     start_date,
@@ -96,27 +133,30 @@ def start_sentinel_export(
             "%Y-%m-%d"
         )
 
-    except ValueError:
+    except ValueError as error:
         raise ValueError(
             "Date format অবশ্যই YYYY-MM-DD হতে হবে।"
-        )
+        ) from error
 
     if start_date_object > end_date_object:
         raise ValueError(
-            "End date অবশ্যই start date-এর সমান বা পরে হতে হবে।"
+            "End date অবশ্যই start date-এর "
+            "সমান বা পরে হতে হবে।"
         )
 
-    end_date_inclusive = (
+    # Earth Engine filterDate-এর end date exclusive।
+    # তাই user-selected end date include করার জন্য ১ দিন যোগ করা হয়েছে।
+    end_date_exclusive = (
         end_date_object + timedelta(days=1)
     ).strftime("%Y-%m-%d")
 
     try:
         cloud_percentage = float(cloud_percentage)
 
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as error:
         raise ValueError(
             "Cloud percentage অবশ্যই number হতে হবে।"
-        )
+        ) from error
 
     if cloud_percentage < 0 or cloud_percentage > 100:
         raise ValueError(
@@ -133,14 +173,18 @@ def start_sentinel_export(
         geodesic=False
     )
 
-    collection = (
+    # ========================================
+    # 1. SENTINEL-2 COLLECTION
+    # ========================================
+
+    s2_collection = (
         ee.ImageCollection(
             "COPERNICUS/S2_SR_HARMONIZED"
         )
         .filterBounds(selected_area)
         .filterDate(
             start_date,
-            end_date_inclusive
+            end_date_exclusive
         )
         .filter(
             ee.Filter.lte(
@@ -150,38 +194,157 @@ def start_sentinel_export(
         )
     )
 
-    image_count = collection.size().getInfo()
+    s2_image_count = s2_collection.size().getInfo()
 
-    if image_count == 0:
+    if s2_image_count == 0:
         raise ValueError(
             "এই area, date range এবং cloud limit-এর জন্য "
             "কোনো Sentinel-2 image পাওয়া যায়নি।"
         )
 
-    selected_image = (
-        collection
-        .sort("CLOUDY_PIXEL_PERCENTAGE")
-        .first()
+    # ========================================
+    # 2. CLOUD MASK + MEDIAN COMPOSITE
+    # ========================================
+
+    s2_clean = s2_collection.map(
+        mask_sentinel2
     )
 
-    product_id = selected_image.get(
-        "PRODUCT_ID"
-    ).getInfo()
+    s2_median = (
+        s2_clean
+        .median()
+        .clip(selected_area)
+    )
 
-    cloud = selected_image.get(
-        "CLOUDY_PIXEL_PERCENTAGE"
-    ).getInfo()
+    # ========================================
+    # 3. SENTINEL-2 INDICES
+    # ========================================
 
-    acquisition_date = (
-        ee.Date(
-            selected_image.get("system:time_start")
+    ndvi = (
+        s2_median
+        .normalizedDifference(["B8", "B4"])
+        .rename("NDVI")
+    )
+
+    # Manual Earth Engine code-এর formula একই রাখা হয়েছে।
+    evi = (
+        s2_median
+        .expression(
+            (
+                "2.5 * ((NIR - RED) / "
+                "(NIR + 6 * RED - "
+                "7.5 * BLUE + 1))"
+            ),
+            {
+                "NIR": s2_median.select("B8"),
+                "RED": s2_median.select("B4"),
+                "BLUE": s2_median.select("B2")
+            }
         )
-        .format("YYYY-MM-dd")
-        .getInfo()
+        .rename("EVI")
     )
+
+    nbr = (
+        s2_median
+        .normalizedDifference(["B8", "B12"])
+        .rename("NBR")
+    )
+
+    # ========================================
+    # 4. SENTINEL-1 COLLECTION
+    # ========================================
+
+    s1_collection = (
+        ee.ImageCollection("COPERNICUS/S1_GRD")
+        .filterBounds(selected_area)
+        .filterDate(
+            start_date,
+            end_date_exclusive
+        )
+        .filter(
+            ee.Filter.eq(
+                "instrumentMode",
+                "IW"
+            )
+        )
+        .filter(
+            ee.Filter.listContains(
+                "transmitterReceiverPolarisation",
+                "VV"
+            )
+        )
+        .filter(
+            ee.Filter.listContains(
+                "transmitterReceiverPolarisation",
+                "VH"
+            )
+        )
+        .select(["VV", "VH"])
+    )
+
+    s1_image_count = s1_collection.size().getInfo()
+
+    if s1_image_count == 0:
+        raise ValueError(
+            "এই area এবং date range-এর জন্য "
+            "Sentinel-1 VV/VH image পাওয়া যায়নি।"
+        )
+
+    # ========================================
+    # 5. SENTINEL-1 MEDIAN COMPOSITE
+    # ========================================
+
+    s1_median = (
+        s1_collection
+        .median()
+        .clip(selected_area)
+    )
+
+    # ========================================
+    # 6. RADAR FEATURES
+    # ========================================
+
+    vv = s1_median.select("VV")
+    vh = s1_median.select("VH")
+
+    vv_vh_ratio = (
+        vv
+        .divide(vh)
+        .rename("VV_VH_ratio")
+    )
+
+    vv_minus_vh = (
+        vv
+        .subtract(vh)
+        .rename("VV_minus_VH")
+    )
+
+    # ========================================
+    # 7. FINAL 10-LAYER ML STACK
+    # ========================================
+
+    stacked_image = (
+        s2_median
+        .select(["B4", "B3", "B2"])
+        .addBands(ndvi)
+        .addBands(evi)
+        .addBands(nbr)
+        .addBands(
+            s1_median.select(["VV", "VH"])
+        )
+        .addBands(vv_vh_ratio)
+        .addBands(vv_minus_vh)
+        .select(FINAL_BAND_ORDER)
+        .clip(selected_area)
+        .toFloat()
+    )
+
+    # ========================================
+    # 8. RGB WEBSITE PREVIEW
+    # ========================================
 
     rgb_image = (
-        selected_image
+        s2_median
         .select(["B4", "B3", "B2"])
         .clip(selected_area)
     )
@@ -198,21 +361,34 @@ def start_sentinel_export(
         "format": "png"
     })
 
+    # ========================================
+    # 9. EXPORT FILE NAME
+    # ========================================
+
     current_time = datetime.now().strftime(
         "%Y%m%d_%H%M%S"
     )
 
-    file_name = f"sentinel_rgb_{current_time}"
+    file_name = (
+        f"S1_S2_ML_10Band_{current_time}"
+    )
+
+    # ========================================
+    # 10. GOOGLE DRIVE EXPORT
+    # ========================================
 
     task = ee.batch.Export.image.toDrive(
-        image=rgb_image,
+        image=stacked_image,
         description=file_name,
         folder=DRIVE_FOLDER,
         fileNamePrefix=file_name,
         region=selected_area,
         scale=10,
         fileFormat="GeoTIFF",
-        maxPixels=1e13
+        maxPixels=1e13,
+        formatOptions={
+            "cloudOptimized": True
+        }
     )
 
     task.start()
@@ -222,26 +398,58 @@ def start_sentinel_export(
         "READY"
     )
 
-    print("\nSentinel export started!")
+    # ========================================
+    # 11. TERMINAL OUTPUT
+    # ========================================
+
+    print("\nS1 + S2 ML-ready export started!")
     print("Task ID:", task.id)
     print("Status:", initial_status)
-    print("Images found:", image_count)
-    print("Selected product:", product_id)
-    print("Acquisition date:", acquisition_date)
-    print("Cloud percentage:", cloud)
+    print("Sentinel-2 images found:", s2_image_count)
+    print("Sentinel-1 images found:", s1_image_count)
+    print("Start date:", start_date)
+    print("End date:", end_date)
+    print("Cloud limit:", cloud_percentage)
     print("Preview URL:", preview_url)
+    print("Export type: S1 + S2 ML-ready GeoTIFF")
+    print("Band count:", len(FINAL_BAND_ORDER))
+    print(
+        "Exported bands:",
+        ", ".join(FINAL_BAND_ORDER)
+    )
     print("Drive folder:", DRIVE_FOLDER)
     print("File name:", f"{file_name}.tif")
+
+    # ========================================
+    # 12. RESPONSE
+    # ========================================
 
     return {
         "task": task,
         "task_id": task.id,
         "status": initial_status,
-        "image_count": image_count,
-        "product_id": product_id,
-        "acquisition_date": acquisition_date,
-        "cloud_percentage": cloud,
+
+        # Existing frontend compatibility
+        "image_count": s2_image_count,
+        "product_id": "S1_S2_MEDIAN_COMPOSITE",
+        "acquisition_date": (
+            f"{start_date} to {end_date}"
+        ),
+        "cloud_percentage": cloud_percentage,
+
+        # Preview
         "preview_url": preview_url,
+
+        # Dataset information
+        "s1_image_count": s1_image_count,
+        "s2_image_count": s2_image_count,
+        "band_count": len(FINAL_BAND_ORDER),
+        "exported_bands": FINAL_BAND_ORDER,
+        "export_type": (
+            "S1 + S2 ML-ready 10-band GeoTIFF"
+        ),
+
+        # Export information
         "file_name": f"{file_name}.tif",
         "drive_folder": DRIVE_FOLDER
     }

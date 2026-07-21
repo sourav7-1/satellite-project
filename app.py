@@ -76,7 +76,10 @@ def process_area():
 
         return jsonify({
             "success": True,
-            "message": "Sentinel export started successfully.",
+            "message": (
+                "S1 + S2 ML-ready 10-band export "
+                "started successfully."
+            ),
             **result
         })
 
