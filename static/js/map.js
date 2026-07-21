@@ -56,6 +56,84 @@ const statusBox =
 const resultDetails =
     document.getElementById("result-details");
 
+const previewSection =
+    document.getElementById("preview-section");
+
+const sentinelPreview =
+    document.getElementById("sentinel-preview");
+
+const previewLoading =
+    document.getElementById("preview-loading");
+
+const previewInformation =
+    document.getElementById("preview-information");
+
+const openPreviewButton =
+    document.getElementById("open-preview-button");
+
+
+function resetPreview() {
+    previewSection.hidden = true;
+
+    sentinelPreview.src = "";
+
+    sentinelPreview.style.display = "none";
+
+    previewLoading.textContent =
+        "Loading satellite preview...";
+
+    previewLoading.style.display = "flex";
+
+    previewInformation.textContent =
+        "Selected satellite image";
+
+    delete openPreviewButton.dataset.previewUrl;
+}
+
+
+function showSentinelPreview(data) {
+    if (!data.preview_url) {
+        resetPreview();
+        return;
+    }
+
+    previewSection.hidden = false;
+
+    sentinelPreview.style.display = "none";
+
+    previewLoading.textContent =
+        "Loading satellite preview...";
+
+    previewLoading.style.display = "flex";
+
+    previewInformation.textContent =
+        `Captured on ${data.acquisition_date || "unknown date"} · ` +
+        `${Number(data.cloud_percentage).toFixed(2)}% cloud`;
+
+    sentinelPreview.onload = function () {
+        previewLoading.style.display = "none";
+        sentinelPreview.style.display = "block";
+
+        setTimeout(function () {
+            map.invalidateSize();
+        }, 100);
+    };
+
+    sentinelPreview.onerror = function () {
+        previewLoading.textContent =
+            "Preview image could not be loaded.";
+
+        previewLoading.style.display = "flex";
+
+        sentinelPreview.style.display = "none";
+    };
+
+    sentinelPreview.src = data.preview_url;
+
+    openPreviewButton.dataset.previewUrl =
+        data.preview_url;
+}
+
 
 function updateSelectedCoordinates(layer) {
     const geoJson = layer.toGeoJSON();
@@ -84,6 +162,8 @@ function updateSelectedCoordinates(layer) {
         selectedCoordinates
     );
 }
+
+
 
 
 map.on(
@@ -123,6 +203,8 @@ map.on(
         exportButton.disabled = true;
 
         resultDetails.innerHTML = "";
+
+        resetPreview();
 
         if (statusInterval) {
             clearInterval(statusInterval);
@@ -236,6 +318,8 @@ async function exportSentinelImage() {
 
     resultDetails.innerHTML = "";
 
+    resetPreview();
+
     updateStatus(
         "Searching Sentinel-2 images...",
         "processing"
@@ -284,6 +368,8 @@ async function exportSentinelImage() {
 
 
         showResultDetails(data);
+
+        showSentinelPreview(data);
 
         if (data.task_id) {
             startTaskMonitoring(data.task_id);
@@ -453,4 +539,21 @@ function startTaskMonitoring(taskId) {
 exportButton.addEventListener(
     "click",
     exportSentinelImage
+);
+
+
+openPreviewButton.addEventListener(
+    "click",
+    function () {
+        const previewUrl =
+            openPreviewButton.dataset.previewUrl;
+
+        if (previewUrl) {
+            window.open(
+                previewUrl,
+                "_blank",
+                "noopener,noreferrer"
+            );
+        }
+    }
 );

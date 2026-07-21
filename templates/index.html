@@ -136,6 +136,43 @@
             </article>
 
         </section>
+        <section
+    id="preview-section"
+    class="preview-section"
+    hidden
+>
+    <div class="preview-header">
+        <div>
+            <h2>Sentinel-2 Preview</h2>
+            <p id="preview-information">
+                Selected satellite image
+            </p>
+        </div>
+
+        <button
+            type="button"
+            id="open-preview-button"
+            class="preview-open-button"
+        >
+            Open full image
+        </button>
+    </div>
+
+    <div class="preview-image-container">
+        <div
+            id="preview-loading"
+            class="preview-loading"
+        >
+            Loading satellite preview...
+        </div>
+
+        <img
+            id="sentinel-preview"
+            src=""
+            alt="Sentinel-2 satellite preview of selected area"
+        >
+    </div>
+</section>
 
     </main>
 

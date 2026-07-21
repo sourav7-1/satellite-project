@@ -172,19 +172,37 @@ def start_sentinel_export(
         "CLOUDY_PIXEL_PERCENTAGE"
     ).getInfo()
 
+    acquisition_date = (
+        ee.Date(
+            selected_image.get("system:time_start")
+        )
+        .format("YYYY-MM-dd")
+        .getInfo()
+    )
+
     rgb_image = (
         selected_image
         .select(["B4", "B3", "B2"])
         .clip(selected_area)
     )
 
+    preview_image = rgb_image.visualize(
+        min=0,
+        max=3000,
+        gamma=1.2
+    )
+
+    preview_url = preview_image.getThumbURL({
+        "region": polygon_coordinates,
+        "dimensions": 1000,
+        "format": "png"
+    })
+
     current_time = datetime.now().strftime(
         "%Y%m%d_%H%M%S"
     )
 
-    file_name = (
-        f"sentinel_rgb_{current_time}"
-    )
+    file_name = f"sentinel_rgb_{current_time}"
 
     task = ee.batch.Export.image.toDrive(
         image=rgb_image,
@@ -209,7 +227,9 @@ def start_sentinel_export(
     print("Status:", initial_status)
     print("Images found:", image_count)
     print("Selected product:", product_id)
+    print("Acquisition date:", acquisition_date)
     print("Cloud percentage:", cloud)
+    print("Preview URL:", preview_url)
     print("Drive folder:", DRIVE_FOLDER)
     print("File name:", f"{file_name}.tif")
 
@@ -219,7 +239,9 @@ def start_sentinel_export(
         "status": initial_status,
         "image_count": image_count,
         "product_id": product_id,
+        "acquisition_date": acquisition_date,
         "cloud_percentage": cloud,
+        "preview_url": preview_url,
         "file_name": f"{file_name}.tif",
         "drive_folder": DRIVE_FOLDER
     }
