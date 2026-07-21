@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, render_template, request, jsonify
+import ee
 
 from services.earth_engine_service import (
     initialize_earth_engine,
@@ -11,12 +12,7 @@ app = Flask(__name__)
 active_tasks = {}
 
 
-try:
-    initialize_earth_engine()
-
-except Exception as error:
-    print("Application could not connect to Earth Engine.")
-    print(error)
+initialize_earth_engine()
 
 
 @app.route("/")
@@ -27,28 +23,23 @@ def home():
 @app.route("/process-area", methods=["POST"])
 def process_area():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
 
         if not data:
             return jsonify({
                 "success": False,
-                "message": "No data was received."
+                "message": "No data received."
             }), 400
 
         coordinates = data.get("coordinates")
         start_date = data.get("start_date")
         end_date = data.get("end_date")
         cloud_percentage = data.get("cloud_percentage", 20)
-        image_type = data.get("image_type", "rgb")
-        drive_folder = data.get(
-            "drive_folder",
-            "Sentinel_Images"
-        )
 
         if not coordinates:
             return jsonify({
                 "success": False,
-                "message": "Please select an area on the map."
+                "message": "Please select an area."
             }), 400
 
         if not start_date or not end_date:
@@ -59,7 +50,6 @@ def process_area():
 
         try:
             cloud_percentage = float(cloud_percentage)
-
         except (TypeError, ValueError):
             return jsonify({
                 "success": False,
@@ -72,40 +62,27 @@ def process_area():
                 "message": "Cloud percentage must be between 0 and 100."
             }), 400
 
-        if image_type not in ["rgb", "ndvi"]:
-            return jsonify({
-                "success": False,
-                "message": "Invalid image type."
-            }), 400
-
-        print("\nSelected coordinates:")
-        print(coordinates)
-
         result = start_sentinel_export(
             coordinates=coordinates,
             start_date=start_date,
             end_date=end_date,
-            cloud_percentage=cloud_percentage,
-            image_type=image_type,
-            drive_folder=drive_folder
+            cloud_percentage=cloud_percentage
         )
 
-        task = result["task"]
-        active_tasks[task.id] = task
+        task = result.pop("task", None)
+
+        if task is not None:
+            active_tasks[task.id] = task
 
         return jsonify({
             "success": True,
-            "message": "Sentinel image export started successfully.",
-            "task_id": result["task_id"],
-            "status": task.status().get("state", "READY"),
-            "image_count": result["image_count"],
-            "product_id": result["product_id"],
-            "cloud_percentage": result["cloud_percentage"],
-            "file_name": result["file_name"],
-            "drive_folder": result["drive_folder"]
+            "message": "Sentinel export started successfully.",
+            **result
         })
 
     except ValueError as error:
+        print("Validation error:", error)
+
         return jsonify({
             "success": False,
             "message": str(error)
@@ -116,37 +93,69 @@ def process_area():
 
         return jsonify({
             "success": False,
-            "message": "Satellite image processing failed.",
+            "message": "Sentinel processing failed.",
             "error": str(error)
         }), 500
 
 
 @app.route("/task-status/<task_id>", methods=["GET"])
 def task_status(task_id):
-    task = active_tasks.get(task_id)
+    try:
+        task = active_tasks.get(task_id)
 
-    if task is None:
+        if task is not None:
+            status = task.status()
+        else:
+            task_status_list = ee.data.getTaskStatus(task_id)
+
+            if not task_status_list:
+                return jsonify({
+                    "success": False,
+                    "message": "Task not found."
+                }), 404
+
+            status = task_status_list[0]
+
+        state = status.get("state", "UNKNOWN")
+
+        response = {
+            "success": True,
+            "task_id": task_id,
+            "status": state
+        }
+
+        if state == "FAILED":
+            response["error"] = status.get(
+                "error_message",
+                "Export failed."
+            )
+
+        return jsonify(response)
+
+    except Exception as error:
+        print("Task status error:", error)
+
         return jsonify({
             "success": False,
-            "message": "Task was not found in the current server session."
-        }), 404
+            "message": "Could not retrieve task status.",
+            "error": str(error)
+        }), 500
 
-    status = task.status()
-    state = status.get("state", "UNKNOWN")
 
-    response = {
-        "success": True,
-        "task_id": task_id,
-        "status": state
-    }
+@app.errorhandler(404)
+def handle_not_found(error):
+    return jsonify({
+        "success": False,
+        "message": "Requested route was not found."
+    }), 404
 
-    if state == "FAILED":
-        response["error"] = status.get(
-            "error_message",
-            "Export failed."
-        )
 
-    return jsonify(response)
+@app.errorhandler(500)
+def handle_server_error(error):
+    return jsonify({
+        "success": False,
+        "message": "Internal server error."
+    }), 500
 
 
 if __name__ == "__main__":

@@ -1,68 +1,73 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import ee
 
 
 PROJECT_ID = "optical-metric-497209-p0"
+DRIVE_FOLDER = "Sentinel_Images"
 
 
 def initialize_earth_engine():
-    """
-    Connect the application with Google Earth Engine.
-    """
-
     try:
         ee.Initialize(project=PROJECT_ID)
         print("Earth Engine Connected Successfully!")
 
     except Exception as error:
-        print("Earth Engine initialization failed:", error)
+        print("Earth Engine connection failed:", error)
         raise
 
 
 def validate_coordinates(coordinates):
-    """
-    Validate polygon coordinates received from Leaflet.
-    """
-
     if not coordinates:
-        raise ValueError("Coordinates are required.")
+        raise ValueError("Coordinates পাওয়া যায়নি।")
 
     if not isinstance(coordinates, list):
-        raise ValueError("Coordinates must be a list.")
+        raise ValueError("Coordinates অবশ্যই list হতে হবে।")
 
-    if len(coordinates) < 4:
-        raise ValueError("A polygon requires at least three points.")
+    if len(coordinates) < 3:
+        raise ValueError(
+            "Polygon তৈরির জন্য কমপক্ষে ৩টি point প্রয়োজন।"
+        )
 
     for point in coordinates:
         if not isinstance(point, list) or len(point) != 2:
-            raise ValueError("Each coordinate must contain longitude and latitude.")
+            raise ValueError(
+                "প্রতিটি coordinate [longitude, latitude] format-এ হতে হবে।"
+            )
 
-        longitude = point[0]
-        latitude = point[1]
+        longitude, latitude = point
 
         if not isinstance(longitude, (int, float)):
-            raise ValueError("Longitude must be a number.")
+            raise ValueError(
+                "Longitude অবশ্যই number হতে হবে।"
+            )
 
         if not isinstance(latitude, (int, float)):
-            raise ValueError("Latitude must be a number.")
+            raise ValueError(
+                "Latitude অবশ্যই number হতে হবে।"
+            )
 
         if longitude < -180 or longitude > 180:
-            raise ValueError("Invalid longitude value.")
+            raise ValueError(
+                "Longitude -180 থেকে 180-এর মধ্যে হতে হবে।"
+            )
 
         if latitude < -90 or latitude > 90:
-            raise ValueError("Invalid latitude value.")
+            raise ValueError(
+                "Latitude -90 থেকে 90-এর মধ্যে হতে হবে।"
+            )
 
 
 def close_polygon(coordinates):
-    """
-    Ensure that the first and last polygon coordinates are the same.
-    """
-
-    polygon_coordinates = coordinates.copy()
+    polygon_coordinates = [
+        point.copy()
+        for point in coordinates
+    ]
 
     if polygon_coordinates[0] != polygon_coordinates[-1]:
-        polygon_coordinates.append(polygon_coordinates[0])
+        polygon_coordinates.append(
+            polygon_coordinates[0].copy()
+        )
 
     return polygon_coordinates
 
@@ -71,18 +76,56 @@ def start_sentinel_export(
     coordinates,
     start_date,
     end_date,
-    cloud_percentage=20,
-    image_type="rgb",
-    drive_folder="Sentinel_Images"
+    cloud_percentage=20
 ):
-    """
-    Search Sentinel-2 images, select the lowest-cloud image,
-    crop it using the selected polygon and start Google Drive export.
-    """
-
     validate_coordinates(coordinates)
 
-    polygon_coordinates = close_polygon(coordinates)
+    if not start_date or not end_date:
+        raise ValueError(
+            "Start date এবং end date প্রয়োজন।"
+        )
+
+    try:
+        start_date_object = datetime.strptime(
+            start_date,
+            "%Y-%m-%d"
+        )
+
+        end_date_object = datetime.strptime(
+            end_date,
+            "%Y-%m-%d"
+        )
+
+    except ValueError:
+        raise ValueError(
+            "Date format অবশ্যই YYYY-MM-DD হতে হবে।"
+        )
+
+    if start_date_object > end_date_object:
+        raise ValueError(
+            "End date অবশ্যই start date-এর সমান বা পরে হতে হবে।"
+        )
+
+    end_date_inclusive = (
+        end_date_object + timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+
+    try:
+        cloud_percentage = float(cloud_percentage)
+
+    except (TypeError, ValueError):
+        raise ValueError(
+            "Cloud percentage অবশ্যই number হতে হবে।"
+        )
+
+    if cloud_percentage < 0 or cloud_percentage > 100:
+        raise ValueError(
+            "Cloud percentage 0 থেকে 100-এর মধ্যে হতে হবে।"
+        )
+
+    polygon_coordinates = close_polygon(
+        coordinates
+    )
 
     selected_area = ee.Geometry.Polygon(
         [polygon_coordinates],
@@ -91,11 +134,16 @@ def start_sentinel_export(
     )
 
     collection = (
-        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        ee.ImageCollection(
+            "COPERNICUS/S2_SR_HARMONIZED"
+        )
         .filterBounds(selected_area)
-        .filterDate(start_date, end_date)
+        .filterDate(
+            start_date,
+            end_date_inclusive
+        )
         .filter(
-            ee.Filter.lt(
+            ee.Filter.lte(
                 "CLOUDY_PIXEL_PERCENTAGE",
                 cloud_percentage
             )
@@ -106,43 +154,42 @@ def start_sentinel_export(
 
     if image_count == 0:
         raise ValueError(
-            "No Sentinel-2 image was found for the selected area and date range."
+            "এই area, date range এবং cloud limit-এর জন্য "
+            "কোনো Sentinel-2 image পাওয়া যায়নি।"
         )
 
-    selected_image = collection.sort(
-        "CLOUDY_PIXEL_PERCENTAGE"
-    ).first()
+    selected_image = (
+        collection
+        .sort("CLOUDY_PIXEL_PERCENTAGE")
+        .first()
+    )
 
-    product_id = selected_image.get("PRODUCT_ID").getInfo()
+    product_id = selected_image.get(
+        "PRODUCT_ID"
+    ).getInfo()
 
-    selected_cloud_percentage = selected_image.get(
+    cloud = selected_image.get(
         "CLOUDY_PIXEL_PERCENTAGE"
     ).getInfo()
 
-    if image_type == "ndvi":
-        export_image = (
-            selected_image
-            .normalizedDifference(["B8", "B4"])
-            .rename("NDVI")
-            .clip(selected_area)
-        )
+    rgb_image = (
+        selected_image
+        .select(["B4", "B3", "B2"])
+        .clip(selected_area)
+    )
 
-    else:
-        export_image = (
-            selected_image
-            .select(["B4", "B3", "B2"])
-            .clip(selected_area)
-        )
+    current_time = datetime.now().strftime(
+        "%Y%m%d_%H%M%S"
+    )
 
-    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    file_name = f"sentinel_{image_type}_{current_time}"
-    task_description = f"sentinel_export_{current_time}"
+    file_name = (
+        f"sentinel_rgb_{current_time}"
+    )
 
     task = ee.batch.Export.image.toDrive(
-        image=export_image,
-        description=task_description,
-        folder=drive_folder,
+        image=rgb_image,
+        description=file_name,
+        folder=DRIVE_FOLDER,
         fileNamePrefix=file_name,
         region=selected_area,
         scale=10,
@@ -152,12 +199,27 @@ def start_sentinel_export(
 
     task.start()
 
+    initial_status = task.status().get(
+        "state",
+        "READY"
+    )
+
+    print("\nSentinel export started!")
+    print("Task ID:", task.id)
+    print("Status:", initial_status)
+    print("Images found:", image_count)
+    print("Selected product:", product_id)
+    print("Cloud percentage:", cloud)
+    print("Drive folder:", DRIVE_FOLDER)
+    print("File name:", f"{file_name}.tif")
+
     return {
         "task": task,
         "task_id": task.id,
+        "status": initial_status,
         "image_count": image_count,
         "product_id": product_id,
-        "cloud_percentage": selected_cloud_percentage,
+        "cloud_percentage": cloud,
         "file_name": f"{file_name}.tif",
-        "drive_folder": drive_folder
+        "drive_folder": DRIVE_FOLDER
     }

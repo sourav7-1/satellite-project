@@ -124,6 +124,11 @@ map.on(
 
         resultDetails.innerHTML = "";
 
+        if (statusInterval) {
+            clearInterval(statusInterval);
+            statusInterval = null;
+        }
+
         updateStatus(
             "Draw a polygon to begin.",
             "idle"
@@ -137,6 +142,27 @@ function updateStatus(message, type) {
 
     statusBox.className =
         `status-box ${type}`;
+}
+
+
+async function getJsonResponse(response) {
+    const contentType =
+        response.headers.get("content-type") || "";
+
+    if (!contentType.includes("application/json")) {
+        const responseText = await response.text();
+
+        console.error(
+            "Non-JSON server response:",
+            responseText
+        );
+
+        throw new Error(
+            `Server returned invalid response. HTTP ${response.status}`
+        );
+    }
+
+    return response.json();
 }
 
 
@@ -193,6 +219,19 @@ async function exportSentinelImage() {
     }
 
 
+    if (
+        Number(cloudPercentage) < 0 ||
+        Number(cloudPercentage) > 100
+    ) {
+        updateStatus(
+            "Cloud percentage must be between 0 and 100.",
+            "error"
+        );
+
+        return;
+    }
+
+
     exportButton.disabled = true;
 
     resultDetails.innerHTML = "";
@@ -226,29 +265,39 @@ async function exportSentinelImage() {
         );
 
 
-        const data = await response.json();
+        const data = await getJsonResponse(response);
 
 
         if (!response.ok || !data.success) {
             throw new Error(
                 data.message ||
+                data.error ||
                 "Processing failed."
             );
         }
 
 
         updateStatus(
-            `Export task started: ${data.status}`,
+            `Export task started: ${data.status || "READY"}`,
             "processing"
         );
 
 
         showResultDetails(data);
 
-        startTaskMonitoring(data.task_id);
+        if (data.task_id) {
+            startTaskMonitoring(data.task_id);
+        } else {
+            throw new Error(
+                "Task ID was not returned by the server."
+            );
+        }
 
     } catch (error) {
-        console.error(error);
+        console.error(
+            "Export error:",
+            error
+        );
 
         updateStatus(
             error.message,
@@ -261,32 +310,40 @@ async function exportSentinelImage() {
 
 
 function showResultDetails(data) {
+    const cloudValue =
+        Number(data.cloud_percentage);
+
+    const cloudText =
+        Number.isFinite(cloudValue)
+            ? `${cloudValue.toFixed(4)}%`
+            : "Not available";
+
     resultDetails.innerHTML = `
         <div class="result-row">
             <span>Images found</span>
-            <strong>${data.image_count}</strong>
+            <strong>${data.image_count ?? 0}</strong>
         </div>
 
         <div class="result-row">
             <span>Selected product</span>
-            <strong>${data.product_id}</strong>
+            <strong>${data.product_id || "Not available"}</strong>
         </div>
 
         <div class="result-row">
             <span>Cloud percentage</span>
-            <strong>
-                ${Number(data.cloud_percentage).toFixed(4)}%
-            </strong>
+            <strong>${cloudText}</strong>
         </div>
 
         <div class="result-row">
             <span>Drive folder</span>
-            <strong>${data.drive_folder}</strong>
+            <strong>
+                ${data.drive_folder || "Sentinel_Images"}
+            </strong>
         </div>
 
         <div class="result-row">
             <span>File name</span>
-            <strong>${data.file_name}</strong>
+            <strong>${data.file_name || "Not available"}</strong>
         </div>
     `;
 }
@@ -302,15 +359,17 @@ function startTaskMonitoring(taskId) {
         async function () {
             try {
                 const response = await fetch(
-                    `/task-status/${taskId}`
+                    `/task-status/${encodeURIComponent(taskId)}`
                 );
 
-                const data = await response.json();
+                const data =
+                    await getJsonResponse(response);
 
 
                 if (!response.ok || !data.success) {
                     throw new Error(
                         data.message ||
+                        data.error ||
                         "Unable to read task status."
                     );
                 }
@@ -318,25 +377,27 @@ function startTaskMonitoring(taskId) {
 
                 const state = data.status;
 
+                console.log(
+                    "Export task status:",
+                    state
+                );
+
 
                 if (state === "READY") {
                     updateStatus(
                         "Export task is waiting...",
                         "processing"
                     );
-                }
 
-
-                if (state === "RUNNING") {
+                } else if (state === "RUNNING") {
                     updateStatus(
                         "Exporting image to Google Drive...",
                         "processing"
                     );
-                }
 
-
-                if (state === "COMPLETED") {
+                } else if (state === "COMPLETED") {
                     clearInterval(statusInterval);
+                    statusInterval = null;
 
                     updateStatus(
                         "Export completed successfully!",
@@ -344,14 +405,13 @@ function startTaskMonitoring(taskId) {
                     );
 
                     exportButton.disabled = false;
-                }
 
-
-                if (
+                } else if (
                     state === "FAILED" ||
                     state === "CANCELLED"
                 ) {
                     clearInterval(statusInterval);
+                    statusInterval = null;
 
                     updateStatus(
                         data.error ||
@@ -360,12 +420,22 @@ function startTaskMonitoring(taskId) {
                     );
 
                     exportButton.disabled = false;
+
+                } else {
+                    updateStatus(
+                        `Current task status: ${state}`,
+                        "processing"
+                    );
                 }
 
             } catch (error) {
                 clearInterval(statusInterval);
+                statusInterval = null;
 
-                console.error(error);
+                console.error(
+                    "Task monitoring error:",
+                    error
+                );
 
                 updateStatus(
                     error.message,
