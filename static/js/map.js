@@ -3,11 +3,51 @@ const map = L.map("map").setView(
     12
 );
 
-L.tileLayer(
+const streetMap = L.tileLayer(
     "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     {
-        maxZoom: 19,
+        maxZoom: 20,
         attribution: "&copy; OpenStreetMap contributors"
+    }
+);
+
+const satelliteMap = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/" +
+    "World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+        maxZoom: 20,
+        attribution: "Tiles &copy; Esri"
+    }
+);
+
+const placeLabels = L.tileLayer(
+    "https://services.arcgisonline.com/ArcGIS/rest/services/" +
+    "Reference/World_Boundaries_and_Places/" +
+    "MapServer/tile/{z}/{y}/{x}",
+    {
+        maxZoom: 20,
+        attribution: "Labels &copy; Esri"
+    }
+);
+
+satelliteMap.addTo(map);
+placeLabels.addTo(map);
+
+const baseMaps = {
+    "Satellite": satelliteMap,
+    "Street Map": streetMap
+};
+
+const overlayMaps = {
+    "Place Labels": placeLabels
+};
+
+L.control.layers(
+    baseMaps,
+    overlayMaps,
+    {
+        position: "topright",
+        collapsed: false
     }
 ).addTo(map);
 
