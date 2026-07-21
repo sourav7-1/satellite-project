@@ -42,6 +42,9 @@ map.addControl(drawControl);
 
 let selectedCoordinates = null;
 let statusInterval = null;
+let layerPreviewMap = null;
+let currentPreviewLayer = null;
+let availableLayerPreviews = {};
 
 
 const exportButton =
@@ -70,6 +73,266 @@ const previewInformation =
 
 const openPreviewButton =
     document.getElementById("open-preview-button");
+
+const layerPreviewSection =
+    document.getElementById("layer-preview-section");
+
+const layerSelector =
+    document.getElementById("layerSelector");
+
+const selectedLayerType =
+    document.getElementById("selectedLayerType");
+
+const selectedLayerName =
+    document.getElementById("selectedLayerName");
+
+const selectedLayerDescription =
+    document.getElementById("selectedLayerDescription");
+
+
+function initializeLayerPreviewMap() {
+    if (layerPreviewMap) {
+        return;
+    }
+
+    layerPreviewMap = L.map(
+        "layerPreviewMap",
+        {
+            zoomControl: true
+        }
+    ).setView(
+        [23.8103, 90.4125],
+        12
+    );
+
+    L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap contributors"
+        }
+    ).addTo(layerPreviewMap);
+}
+
+
+function populateLayerSelector() {
+    layerSelector.replaceChildren();
+
+    const previewEntries = Object.entries(
+        availableLayerPreviews
+    );
+
+    if (previewEntries.length === 0) {
+        const emptyOption = document.createElement("option");
+
+        emptyOption.value = "";
+        emptyOption.textContent = "No preview layers available";
+
+        layerSelector.appendChild(emptyOption);
+        layerSelector.disabled = true;
+        return;
+    }
+
+    previewEntries.forEach(
+        function ([layerKey, layerData]) {
+            const option = document.createElement("option");
+
+            option.value = layerKey;
+            option.textContent = layerData.name || layerKey;
+
+            layerSelector.appendChild(option);
+        }
+    );
+
+    layerSelector.disabled = false;
+}
+
+
+function getLayerDescription(layerKey) {
+    const descriptions = {
+        RGB: (
+            "Natural-color Sentinel-2 composite using " +
+            "B4, B3 and B2."
+        ),
+        B4: "Sentinel-2 red band.",
+        B3: "Sentinel-2 green band.",
+        B2: "Sentinel-2 blue band.",
+        NDVI: "Normalized Difference Vegetation Index.",
+        EVI: "Enhanced Vegetation Index.",
+        NBR: "Normalized Burn Ratio.",
+        VV: "Sentinel-1 VV radar backscatter.",
+        VH: "Sentinel-1 VH radar backscatter.",
+        VV_VH_ratio: (
+            "Feature calculated from VV divided by VH."
+        ),
+        VV_minus_VH: (
+            "Feature calculated from VV minus VH."
+        )
+    };
+
+    return descriptions[layerKey] ||
+        "Earth Engine preview of the selected layer.";
+}
+
+
+function updateLayerInformation(layerKey) {
+    const layerData = availableLayerPreviews[layerKey];
+
+    if (!layerData) {
+        selectedLayerType.textContent = "No layer selected";
+        selectedLayerName.textContent =
+            "Layer preview unavailable";
+        selectedLayerDescription.textContent =
+            "Select an available layer to view its description.";
+        return;
+    }
+
+    selectedLayerType.textContent =
+        layerData.type || "layer";
+    selectedLayerName.textContent =
+        layerData.name || layerKey;
+    selectedLayerDescription.textContent =
+        getLayerDescription(layerKey);
+}
+
+
+function showPreviewLayer(layerKey) {
+    const layerData = availableLayerPreviews[layerKey];
+
+    if (
+        !layerData ||
+        typeof layerData.tile_url !== "string" ||
+        !layerData.tile_url
+    ) {
+        updateLayerInformation("");
+        return;
+    }
+
+    initializeLayerPreviewMap();
+
+    if (currentPreviewLayer) {
+        layerPreviewMap.removeLayer(currentPreviewLayer);
+        currentPreviewLayer = null;
+    }
+
+    currentPreviewLayer = L.tileLayer(
+        layerData.tile_url,
+        {
+            maxZoom: 20,
+            attribution: "Google Earth Engine"
+        }
+    );
+
+    currentPreviewLayer.on(
+        "tileerror",
+        function () {
+            if (layerSelector.value === layerKey) {
+                selectedLayerDescription.textContent =
+                    "This Earth Engine layer could not be loaded. " +
+                    "Try processing the area again to refresh its tiles.";
+            }
+        }
+    );
+
+    currentPreviewLayer.addTo(layerPreviewMap);
+
+    layerSelector.value = layerKey;
+    updateLayerInformation(layerKey);
+}
+
+
+function resetLayerPreview() {
+    availableLayerPreviews = {};
+
+    if (currentPreviewLayer && layerPreviewMap) {
+        layerPreviewMap.removeLayer(currentPreviewLayer);
+        currentPreviewLayer = null;
+    }
+
+    const placeholderOption = document.createElement("option");
+
+    placeholderOption.value = "";
+    placeholderOption.textContent =
+        "Process an area to load layers";
+
+    layerSelector.replaceChildren(placeholderOption);
+    layerSelector.disabled = true;
+
+    selectedLayerType.textContent = "No layer selected";
+    selectedLayerName.textContent = "Layer preview unavailable";
+    selectedLayerDescription.textContent =
+        "Complete processing to inspect the available image layers.";
+
+    layerPreviewSection.hidden = true;
+}
+
+
+function loadLayerPreviews(layerPreviews) {
+    if (
+        !layerPreviews ||
+        typeof layerPreviews !== "object" ||
+        Array.isArray(layerPreviews)
+    ) {
+        resetLayerPreview();
+        return;
+    }
+
+    availableLayerPreviews = Object.fromEntries(
+        Object.entries(layerPreviews).filter(
+            function ([, layerData]) {
+                return (
+                    layerData &&
+                    typeof layerData.tile_url === "string" &&
+                    layerData.tile_url
+                );
+            }
+        )
+    );
+
+    if (Object.keys(availableLayerPreviews).length === 0) {
+        resetLayerPreview();
+        return;
+    }
+
+    layerPreviewSection.hidden = false;
+
+    initializeLayerPreviewMap();
+    populateLayerSelector();
+
+    const defaultLayer = availableLayerPreviews.RGB
+        ? "RGB"
+        : Object.keys(availableLayerPreviews)[0];
+
+    showPreviewLayer(defaultLayer);
+
+    const polygonLatLngs = (
+        Array.isArray(selectedCoordinates)
+            ? selectedCoordinates.map(
+                function ([longitude, latitude]) {
+                    return [latitude, longitude];
+                }
+            )
+            : []
+    );
+
+    const previewBounds = L.latLngBounds(polygonLatLngs);
+
+    setTimeout(
+        function () {
+            layerPreviewMap.invalidateSize();
+
+            if (previewBounds.isValid()) {
+                layerPreviewMap.fitBounds(
+                    previewBounds,
+                    {
+                        padding: [24, 24]
+                    }
+                );
+            }
+        },
+        100
+    );
+}
 
 
 function resetPreview() {
@@ -157,6 +420,8 @@ function updateSelectedCoordinates(layer) {
 
     resultDetails.innerHTML = "";
 
+    resetLayerPreview();
+
     console.log(
         "Selected coordinates:",
         selectedCoordinates
@@ -205,6 +470,8 @@ map.on(
         resultDetails.innerHTML = "";
 
         resetPreview();
+
+        resetLayerPreview();
 
         if (statusInterval) {
             clearInterval(statusInterval);
@@ -320,6 +587,8 @@ async function exportSentinelImage() {
 
     resetPreview();
 
+    resetLayerPreview();
+
     updateStatus(
         "Searching Sentinel-2 images...",
         "processing"
@@ -370,6 +639,8 @@ async function exportSentinelImage() {
         showResultDetails(data);
 
         showSentinelPreview(data);
+
+        loadLayerPreviews(data.layer_previews);
 
         if (data.task_id) {
             startTaskMonitoring(data.task_id);
@@ -581,5 +852,13 @@ openPreviewButton.addEventListener(
                 "noopener,noreferrer"
             );
         }
+    }
+);
+
+
+layerSelector.addEventListener(
+    "change",
+    function () {
+        showPreviewLayer(layerSelector.value);
     }
 );

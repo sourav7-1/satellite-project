@@ -20,6 +20,12 @@ FINAL_BAND_ORDER = [
 ]
 
 
+def create_layer_tile_url(image, visualization):
+    map_data = image.getMapId(visualization)
+
+    return map_data["tile_fetcher"].url_format
+
+
 def initialize_earth_engine():
     try:
         ee.Initialize(project=PROJECT_ID)
@@ -361,6 +367,149 @@ def start_sentinel_export(
         "format": "png"
     })
 
+    grayscale_palette = [
+        "000000",
+        "FFFFFF"
+    ]
+    vegetation_palette = [
+        "5B0A0A",
+        "D73027",
+        "FEE08B",
+        "A6D96A",
+        "1A9850",
+        "00441B"
+    ]
+    burn_palette = [
+        "7F0000",
+        "D73027",
+        "FDAE61",
+        "FFFFBF",
+        "A6D96A",
+        "1A9850",
+        "006837"
+    ]
+    radar_feature_palette = [
+        "313695",
+        "74ADD1",
+        "FFFFBF",
+        "F46D43",
+        "A50026"
+    ]
+
+    layer_preview_definitions = {
+        "RGB": {
+            "name": "RGB",
+            "type": "composite",
+            "image": rgb_image,
+            "visualization": {
+                "bands": ["B4", "B3", "B2"],
+                "min": 0,
+                "max": 3000,
+                "gamma": 1.2
+            }
+        },
+        "B4": {
+            "name": "B4",
+            "type": "spectral band",
+            "image": s2_median.select("B4"),
+            "visualization": {
+                "min": 0,
+                "max": 3000,
+                "palette": grayscale_palette
+            }
+        },
+        "B3": {
+            "name": "B3",
+            "type": "spectral band",
+            "image": s2_median.select("B3"),
+            "visualization": {
+                "min": 0,
+                "max": 3000,
+                "palette": grayscale_palette
+            }
+        },
+        "B2": {
+            "name": "B2",
+            "type": "spectral band",
+            "image": s2_median.select("B2"),
+            "visualization": {
+                "min": 0,
+                "max": 3000,
+                "palette": grayscale_palette
+            }
+        },
+        "NDVI": {
+            "name": "NDVI",
+            "type": "index",
+            "image": ndvi,
+            "visualization": {
+                "min": -1,
+                "max": 1,
+                "palette": vegetation_palette
+            }
+        },
+        "EVI": {
+            "name": "EVI",
+            "type": "index",
+            "image": evi,
+            "visualization": {
+                "min": -1,
+                "max": 1,
+                "palette": vegetation_palette
+            }
+        },
+        "NBR": {
+            "name": "NBR",
+            "type": "index",
+            "image": nbr,
+            "visualization": {
+                "min": -1,
+                "max": 1,
+                "palette": burn_palette
+            }
+        },
+        "VV": {
+            "name": "VV",
+            "type": "radar band",
+            "image": vv,
+            "visualization": {
+                "min": -25,
+                "max": 5,
+                "palette": grayscale_palette
+            }
+        },
+        "VH": {
+            "name": "VH",
+            "type": "radar band",
+            "image": vh,
+            "visualization": {
+                "min": -30,
+                "max": 0,
+                "palette": grayscale_palette
+            }
+        },
+        "VV_VH_ratio": {
+            "name": "VV_VH_ratio",
+            "type": "radar feature",
+            "image": vv_vh_ratio,
+            "visualization": {
+                "min": -2,
+                "max": 4,
+                "palette": radar_feature_palette
+            }
+        },
+        "VV_minus_VH": {
+            "name": "VV_minus_VH",
+            "type": "radar feature",
+            "image": vv_minus_vh,
+            "visualization": {
+                "min": -10,
+                "max": 20,
+                "palette": radar_feature_palette
+            }
+        }
+    }
+
     # ========================================
     # 9. EXPORT FILE NAME
     # ========================================
@@ -397,6 +546,27 @@ def start_sentinel_export(
         "state",
         "READY"
     )
+
+    layer_previews = {}
+
+    for layer_key, layer_definition in (
+        layer_preview_definitions.items()
+    ):
+        try:
+            layer_previews[layer_key] = {
+                "name": layer_definition["name"],
+                "type": layer_definition["type"],
+                "tile_url": create_layer_tile_url(
+                    layer_definition["image"],
+                    layer_definition["visualization"]
+                )
+            }
+
+        except Exception as error:
+            print(
+                f"Could not create {layer_key} preview:",
+                error
+            )
 
     # ========================================
     # 11. TERMINAL OUTPUT
@@ -439,6 +609,7 @@ def start_sentinel_export(
 
         # Preview
         "preview_url": preview_url,
+        "layer_previews": layer_previews,
 
         # Dataset information
         "s1_image_count": s1_image_count,
