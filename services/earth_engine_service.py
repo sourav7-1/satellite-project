@@ -115,6 +115,32 @@ def mask_sentinel2(image):
     )
 
 
+def get_collection_acquisition_metadata(collection):
+    sorted_collection = collection.sort(
+        "system:time_start"
+    )
+
+    acquisition_dates = ee.List(
+        sorted_collection.aggregate_array(
+            "system:time_start"
+        )
+    ).map(
+        lambda timestamp: ee.Date(timestamp).format(
+            "YYYY-MM-dd"
+        )
+    )
+
+    metadata = ee.Dictionary({
+        "image_count": sorted_collection.size(),
+        "acquisition_dates": acquisition_dates
+    }).getInfo()
+
+    return (
+        int(metadata.get("image_count", 0)),
+        metadata.get("acquisition_dates", [])
+    )
+
+
 def start_sentinel_export(
     coordinates,
     start_date,
@@ -171,6 +197,10 @@ def start_sentinel_export(
         end_date_object + timedelta(days=1)
     ).strftime("%Y-%m-%d")
 
+    days_covered = (
+        end_date_object - start_date_object
+    ).days + 1
+
     try:
         cloud_percentage = float(cloud_percentage)
 
@@ -215,7 +245,12 @@ def start_sentinel_export(
         )
     )
 
-    s2_image_count = s2_collection.size().getInfo()
+    (
+        s2_image_count,
+        sentinel2_dates
+    ) = get_collection_acquisition_metadata(
+        s2_collection
+    )
 
     if s2_image_count == 0:
         raise ValueError(
@@ -303,7 +338,12 @@ def start_sentinel_export(
         .select(["VV", "VH"])
     )
 
-    s1_image_count = s1_collection.size().getInfo()
+    (
+        s1_image_count,
+        sentinel1_dates
+    ) = get_collection_acquisition_metadata(
+        s1_collection
+    )
 
     if s1_image_count == 0:
         raise ValueError(
@@ -639,8 +679,13 @@ def start_sentinel_export(
         )
     print("Sentinel-2 images found:", s2_image_count)
     print("Sentinel-1 images found:", s1_image_count)
+    print(
+        "Total images used:",
+        s1_image_count + s2_image_count
+    )
     print("Start date:", start_date)
     print("End date:", end_date)
+    print("Days covered:", days_covered)
     print("Cloud limit:", cloud_percentage)
     print("Preview URL:", preview_url)
     print("Export type: S1 + S2 ML-ready GeoTIFF")
@@ -674,6 +719,25 @@ def start_sentinel_export(
         # Preview
         "preview_url": preview_url,
         "layer_previews": layer_previews,
+
+        # Satellite acquisition summary
+        "processing_method": (
+            "Cloud-Masked Median Composite"
+        ),
+        "composite_type": "Monthly Median Composite",
+        "days_covered": days_covered,
+        "cloud_threshold": cloud_percentage,
+        "resolution": "10 m",
+        "coordinate_system": "EPSG:4326",
+        "output_format": "GeoTIFF",
+        "bands": FINAL_BAND_ORDER,
+        "sentinel1_image_count": s1_image_count,
+        "sentinel2_image_count": s2_image_count,
+        "total_images_used": (
+            s1_image_count + s2_image_count
+        ),
+        "sentinel1_dates": sentinel1_dates,
+        "sentinel2_dates": sentinel2_dates,
 
         # Dataset information
         "s1_image_count": s1_image_count,

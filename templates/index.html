@@ -8,7 +8,28 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Map Sentinel Automation</title>
+    <meta
+        name="description"
+        content="Enterprise satellite intelligence dashboard for tree monitoring."
+    >
+
+    <title>TerraWatch Satellite Intelligence</title>
+
+    <link
+        rel="preconnect"
+        href="https://fonts.googleapis.com"
+    >
+
+    <link
+        rel="preconnect"
+        href="https://fonts.gstatic.com"
+        crossorigin
+    >
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+    >
 
     <link
         rel="stylesheet"
@@ -27,253 +48,726 @@
 </head>
 
 <body>
-
-    <main class="page-container">
-
-        <section class="header-section">
-            <p class="eyebrow">Satellite Image Collection</p>
-
-            <h1>Map Sentinel Automation</h1>
-
-            <p>
-                Select an area, choose the date range and export
-                Sentinel-2 imagery to Google Drive.
-            </p>
-        </section>
-
-        <section class="control-panel">
-
-            <div class="form-group">
-                <label for="start-date">Start date</label>
-
-                <input
-                    type="date"
-                    id="start-date"
-                    value="2026-01-01"
-                >
-            </div>
-
-            <div class="form-group">
-                <label for="end-date">End date</label>
-
-                <input
-                    type="date"
-                    id="end-date"
-                    value="2026-07-20"
-                >
-            </div>
-
-            <div class="form-group">
-                <label for="cloud-percentage">
-                    Maximum cloud percentage
-                </label>
-
-                <input
-                    type="number"
-                    id="cloud-percentage"
-                    value="20"
-                    min="0"
-                    max="100"
-                >
-            </div>
-
-            <div class="form-group">
-                <label for="image-type">Image type</label>
-
-                <select id="image-type">
-                    <option value="rgb">
-                        RGB GeoTIFF
-                    </option>
-
-                    <option value="ndvi">
-                        NDVI GeoTIFF
-                    </option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="drive-folder">
-                    Google Drive folder
-                </label>
-
-                <input
-                    type="text"
-                    id="drive-folder"
-                    value="Sentinel_Images"
-                >
-            </div>
-
-            <div class="export-destination-group">
-                <label for="exportDestination">
-                    Export Destination
-                </label>
-
-                <select id="exportDestination">
-                    <option value="drive">
-                        Google Drive
-                    </option>
-
-                    <option value="local">
-                        Local Computer
-                    </option>
-
-                    <option value="both" selected>
-                        Google Drive + Local Computer
-                    </option>
-                </select>
-            </div>
-
-            <div class="export-action-group">
-                <button
-                    type="button"
-                    id="export-button"
-                    disabled
-                >
-                    Export Sentinel Image
-                </button>
-
-                <button
-                    type="button"
-                    id="localDownloadButton"
-                    class="local-download-button"
-                    hidden
-                    disabled
-                >
-                    Download GeoTIFF
-                </button>
-            </div>
-
-        </section>
-
-        <section class="map-section">
-            <div id="map"></div>
-        </section>
-
-        <section class="information-grid">
-
-            <article class="information-card">
-                <h2>Selected Coordinates</h2>
-
-                <pre id="coordinates">No area selected</pre>
-            </article>
-
-            <article class="information-card">
-                <h2>Export Status</h2>
-
-                <div id="status-box" class="status-box idle">
-                    Draw a polygon to begin.
+    <main class="app-shell workspace-layout">
+        <aside class="workspace-sidebar map-workspace">
+            <header class="brand-header">
+                <div class="brand-mark" aria-hidden="true">
+                    <span></span>
                 </div>
 
-                <div id="result-details"></div>
-            </article>
-
-        </section>
-        <section
-    id="preview-section"
-    class="preview-section"
-    hidden
->
-    <div class="preview-header">
-        <div>
-            <h2>Sentinel-2 Preview</h2>
-            <p id="preview-information">
-                Selected satellite image
-            </p>
-        </div>
-
-        <button
-            type="button"
-            id="open-preview-button"
-            class="preview-open-button"
-        >
-            Open full image
-        </button>
-    </div>
-
-    <div class="preview-image-container">
-        <div
-            id="preview-loading"
-            class="preview-loading"
-        >
-            Loading satellite preview...
-        </div>
-
-        <img
-            id="sentinel-preview"
-            src=""
-            alt="Sentinel-2 satellite preview of selected area"
-        >
-    </div>
-</section>
-
-        <section
-            id="layer-preview-section"
-            class="layer-preview-section"
-            hidden
-        >
-            <div class="layer-preview-header">
                 <div>
-                    <p class="layer-preview-eyebrow">
-                        Interactive Earth Engine tiles
-                    </p>
-
-                    <h2>Layer-by-Layer Preview</h2>
-
-                    <p>
-                        Inspect every layer in the exported
-                        ML-ready GeoTIFF.
-                    </p>
+                    <p class="eyebrow">Satellite Tree Monitoring</p>
+                    <h1>TerraWatch</h1>
                 </div>
 
-                <div class="layer-selector-group">
-                    <label for="layerSelector">
-                        Preview layer
+                <span class="live-indicator">
+                    <i aria-hidden="true"></i>
+                    Earth Engine
+                </span>
+            </header>
+
+            <section
+                class="dashboard-card search-card
+                       map-search-wrapper"
+            >
+                <div class="section-heading compact">
+                    <div>
+                        <span class="section-kicker">Navigate</span>
+                        <h2>Search Location</h2>
+                    </div>
+                </div>
+
+                <form
+                    id="location-search-form"
+                    class="location-search-form"
+                >
+                    <label
+                        class="sr-only"
+                        for="location-search-input"
+                    >
+                        Search any location
                     </label>
 
-                    <select id="layerSelector" disabled>
-                        <option value="">
-                            Process an area to load layers
+                    <div class="search-input-wrap">
+                        <span
+                            class="search-icon"
+                            aria-hidden="true"
+                        >
+                            ⌕
+                        </span>
+
+                        <input
+                            type="search"
+                            id="location-search-input"
+                            placeholder="Search any location..."
+                            autocomplete="off"
+                        >
+
+                        <button
+                            type="submit"
+                            id="location-search-button"
+                            aria-label="Search location"
+                        >
+                            Search
+                        </button>
+                    </div>
+                </form>
+
+                <div
+                    class="quick-location-list"
+                    aria-label="Quick locations"
+                >
+                    <button
+                        type="button"
+                        class="location-chip"
+                        data-location-query="Daffodil International University, Savar, Bangladesh"
+                    >
+                        DIU
+                    </button>
+
+                    <button
+                        type="button"
+                        class="location-chip"
+                        data-location-query="Dhaka, Bangladesh"
+                    >
+                        Dhaka
+                    </button>
+
+                    <button
+                        type="button"
+                        class="location-chip"
+                        data-location-query="Sylhet, Bangladesh"
+                    >
+                        Sylhet
+                    </button>
+
+                    <button
+                        type="button"
+                        class="location-chip"
+                        data-location-query="Chattogram, Bangladesh"
+                    >
+                        Chittagong
+                    </button>
+
+                    <button
+                        type="button"
+                        class="location-chip"
+                        data-location-query="Cox's Bazar, Bangladesh"
+                    >
+                        Cox's Bazar
+                    </button>
+                </div>
+
+                <p
+                    id="location-search-status"
+                    class="location-search-status"
+                    aria-live="polite"
+                >
+                    Search is powered by OpenStreetMap.
+                </p>
+            </section>
+
+            <section class="dashboard-card map-card">
+                <div class="map-card-header">
+                    <div>
+                        <span class="section-kicker">Workspace</span>
+                        <h2>Interactive Map</h2>
+                    </div>
+
+                    <div class="map-action-buttons">
+                        <button
+                            type="button"
+                            id="locate-me-button"
+                            class="icon-action"
+                            title="Locate me"
+                            aria-label="Locate me"
+                        >
+                            ◎
+                        </button>
+
+                        <button
+                            type="button"
+                            id="reset-view-button"
+                            class="icon-action"
+                            title="Reset map view"
+                            aria-label="Reset map view"
+                        >
+                            ↺
+                        </button>
+
+                    </div>
+                </div>
+
+                <div class="map-frame primary-map-card">
+                    <button
+                        type="button"
+                        id="fullscreen-map-button"
+                        class="icon-action
+                               fullscreen-map-action"
+                        title="Toggle fullscreen map"
+                        aria-label="Toggle fullscreen map"
+                    >
+                        ⛶
+                    </button>
+
+                    <div id="map"></div>
+                </div>
+            </section>
+
+            <section class="dashboard-card selected-area-card">
+                <div class="section-heading compact">
+                    <div>
+                        <span class="section-kicker">ROI Intelligence</span>
+                        <h2>Selected Area</h2>
+                    </div>
+
+                    <span
+                        id="selected-area-state"
+                        class="state-badge idle"
+                    >
+                        No ROI
+                    </span>
+                </div>
+
+                <div class="roi-metric-grid">
+                    <div class="roi-metric">
+                        <span>Area</span>
+                        <strong id="selected-area-square-meters">—</strong>
+                        <small>square meters</small>
+                    </div>
+
+                    <div class="roi-metric">
+                        <span>Hectare</span>
+                        <strong id="selected-area-hectares">—</strong>
+                        <small>ha</small>
+                    </div>
+
+                    <div class="roi-metric">
+                        <span>Square Kilometer</span>
+                        <strong id="selected-area-square-kilometers">—</strong>
+                        <small>km²</small>
+                    </div>
+
+                    <div class="roi-metric">
+                        <span>Perimeter</span>
+                        <strong id="selected-area-perimeter">—</strong>
+                        <small>kilometers</small>
+                    </div>
+
+                    <div class="roi-metric">
+                        <span>Vertices</span>
+                        <strong id="selected-area-vertices">—</strong>
+                        <small>points</small>
+                    </div>
+
+                    <div class="roi-metric">
+                        <span>ROI Type</span>
+                        <strong id="selected-area-type">—</strong>
+                        <small>geometry</small>
+                    </div>
+                </div>
+
+                <details class="coordinate-details">
+                    <summary>View coordinates</summary>
+                    <pre id="coordinates">No area selected</pre>
+                </details>
+            </section>
+
+            <section class="dashboard-card processing-card">
+                <div class="section-heading compact">
+                    <div>
+                        <span class="section-kicker">Configuration</span>
+                        <h2>Processing Controls</h2>
+                    </div>
+                </div>
+
+                <div class="date-control-grid">
+                    <div class="form-group">
+                        <label for="start-date">Start</label>
+                        <input
+                            type="date"
+                            id="start-date"
+                            value="2026-01-01"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="end-date">End</label>
+                        <input
+                            type="date"
+                            id="end-date"
+                            value="2026-07-20"
+                        >
+                    </div>
+                </div>
+
+                <div class="cloud-control">
+                    <div class="field-label-row">
+                        <label for="cloud-percentage">
+                            Maximum Cloud
+                        </label>
+
+                        <output
+                            id="cloud-percentage-value"
+                            for="cloud-percentage"
+                        >
+                            20%
+                        </output>
+                    </div>
+
+                    <input
+                        type="range"
+                        id="cloud-percentage"
+                        value="20"
+                        min="0"
+                        max="100"
+                        step="1"
+                    >
+
+                    <div class="range-labels">
+                        <span>Clear</span>
+                        <span>Cloudy</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="exportDestination">
+                        Export Destination
+                    </label>
+
+                    <select id="exportDestination">
+                        <option value="drive">
+                            Google Drive
+                        </option>
+
+                        <option value="local">
+                            Local Computer
+                        </option>
+
+                        <option value="both" selected>
+                            Google Drive + Local
                         </option>
                     </select>
                 </div>
-            </div>
 
-            <div class="layer-preview-dashboard">
-                <div class="layer-preview-map-panel">
-                    <div
-                        id="layerPreviewMap"
-                        aria-label="Selected Earth Engine layer preview"
-                    ></div>
+                <details class="advanced-settings">
+                    <summary>Advanced export settings</summary>
+
+                    <div class="advanced-control-grid">
+                        <div class="form-group">
+                            <label for="image-type">
+                                Image type
+                            </label>
+
+                            <select id="image-type">
+                                <option value="rgb">
+                                    RGB GeoTIFF
+                                </option>
+
+                                <option value="ndvi">
+                                    NDVI GeoTIFF
+                                </option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="drive-folder">
+                                Drive folder
+                            </label>
+
+                            <input
+                                type="text"
+                                id="drive-folder"
+                                value="Sentinel_Images"
+                            >
+                        </div>
+                    </div>
+                </details>
+
+                <div class="export-action-group">
+                    <button
+                        type="button"
+                        id="export-button"
+                        disabled
+                    >
+                        <span aria-hidden="true">✦</span>
+                        Process Area
+                    </button>
+
+                    <button
+                        type="button"
+                        id="localDownloadButton"
+                        class="local-download-button"
+                        hidden
+                        disabled
+                    >
+                        Download GeoTIFF
+                    </button>
+                </div>
+            </section>
+        </aside>
+
+        <section
+            class="intelligence-content results-dashboard"
+        >
+            <header class="intelligence-header">
+                <div>
+                    <p class="eyebrow">Satellite Intelligence Workspace</p>
+                    <h2>Satellite Acquisition Summary</h2>
+                    <p>
+                        Trace every acquisition and processing metric
+                        behind the final tree-monitoring dataset.
+                    </p>
                 </div>
 
-                <aside class="layer-information-panel">
-                    <span
-                        id="selectedLayerType"
-                        class="layer-type-badge"
-                    >
-                        No layer selected
+                <span class="dataset-badge">
+                    <i aria-hidden="true"></i>
+                    ML-Ready 10-Band GeoTIFF
+                </span>
+            </header>
+
+            <section class="status-panel">
+                <div>
+                    <span class="section-kicker">Pipeline Status</span>
+                    <div id="status-box" class="status-box idle">
+                        Draw a polygon or rectangle to begin.
+                    </div>
+                </div>
+
+                <div id="result-details"></div>
+            </section>
+
+            <section
+                id="acquisition-summary-section"
+                class="acquisition-summary-section"
+            >
+                <div class="summary-section-heading">
+                    <div>
+                        <span class="section-kicker">Composite Metadata</span>
+                        <h3>Processing Summary</h3>
+                    </div>
+
+                    <span class="summary-ready-badge">
+                        Live metadata
                     </span>
+                </div>
 
-                    <h3 id="selectedLayerName">
-                        Layer preview unavailable
-                    </h3>
+                <div class="acquisition-metadata-grid">
+                    <article class="metric-card accent-green">
+                        <span>Composite Period</span>
+                        <strong id="summary-composite-period">—</strong>
+                        <small>Selected temporal window</small>
+                    </article>
 
-                    <p id="selectedLayerDescription">
-                        Complete processing to inspect the
-                        available image layers.
-                    </p>
+                    <article class="metric-card accent-blue">
+                        <span>Days Covered</span>
+                        <strong id="summary-days-covered">—</strong>
+                        <small>Inclusive date coverage</small>
+                    </article>
 
-                    <div class="layer-information-note">
-                        <strong>Selected area</strong>
-                        <span>
-                            The map is fitted to the polygon or
-                            rectangle drawn on the main map.
+                    <article class="metric-card accent-purple">
+                        <span>Processing Method</span>
+                        <strong id="summary-processing-method">—</strong>
+                        <small>Scene preparation workflow</small>
+                    </article>
+
+                    <article class="metric-card accent-cyan">
+                        <span>Composite Type</span>
+                        <strong id="summary-composite-type">—</strong>
+                        <small>Temporal aggregation</small>
+                    </article>
+
+                    <article class="metric-card accent-amber">
+                        <span>Cloud Threshold</span>
+                        <strong id="summary-cloud-threshold">—</strong>
+                        <small>Maximum scene cloud</small>
+                    </article>
+
+                    <article class="metric-card accent-blue">
+                        <span>Sentinel-1 Images</span>
+                        <strong id="summary-sentinel1-count">—</strong>
+                        <small>Radar scenes used</small>
+                    </article>
+
+                    <article class="metric-card accent-green">
+                        <span>Sentinel-2 Images</span>
+                        <strong id="summary-sentinel2-count">—</strong>
+                        <small>Optical scenes used</small>
+                    </article>
+
+                    <article class="metric-card accent-purple">
+                        <span>Total Images Used</span>
+                        <strong id="summary-total-images">—</strong>
+                        <small>Combined acquisitions</small>
+                    </article>
+
+                    <article class="metric-card accent-cyan">
+                        <span>Resolution</span>
+                        <strong id="summary-resolution">—</strong>
+                        <small>Output pixel size</small>
+                    </article>
+
+                    <article class="metric-card accent-blue">
+                        <span>Coordinate System</span>
+                        <strong id="summary-coordinate-system">—</strong>
+                        <small>Spatial reference</small>
+                    </article>
+
+                    <article class="metric-card accent-green">
+                        <span>Output Format</span>
+                        <strong id="summary-output-format">—</strong>
+                        <small>Delivery format</small>
+                    </article>
+
+                    <article class="metric-card accent-amber">
+                        <span>Band Count</span>
+                        <strong id="summary-band-count">—</strong>
+                        <small>ML-ready features</small>
+                    </article>
+                </div>
+
+                <article class="exported-bands-card">
+                    <div>
+                        <span class="section-kicker">Feature Stack</span>
+                        <h3>Exported Bands</h3>
+                    </div>
+
+                    <div
+                        id="summary-exported-bands"
+                        class="exported-band-list"
+                    >
+                        <span class="band-empty">
+                            Process an area to load bands
                         </span>
                     </div>
-                </aside>
-            </div>
-        </section>
+                </article>
 
+                <div class="acquisition-date-grid">
+                    <article class="acquisition-date-panel sentinel-one">
+                        <div class="acquisition-date-heading">
+                            <div>
+                                <span class="section-kicker">
+                                    Radar Timeline
+                                </span>
+                                <h3>Sentinel-1 Acquisition Dates</h3>
+                            </div>
+
+                            <span id="summary-sentinel1-date-count">
+                                0 images
+                            </span>
+                        </div>
+
+                        <div
+                            id="sentinel1-acquisition-dates"
+                            class="acquisition-date-list"
+                            aria-live="polite"
+                        >
+                            <p class="acquisition-date-empty">
+                                Process an area to load acquisition dates.
+                            </p>
+                        </div>
+                    </article>
+
+                    <article class="acquisition-date-panel sentinel-two">
+                        <div class="acquisition-date-heading">
+                            <div>
+                                <span class="section-kicker">
+                                    Optical Timeline
+                                </span>
+                                <h3>Sentinel-2 Acquisition Dates</h3>
+                            </div>
+
+                            <span id="summary-sentinel2-date-count">
+                                0 images
+                            </span>
+                        </div>
+
+                        <div
+                            id="sentinel2-acquisition-dates"
+                            class="acquisition-date-list"
+                            aria-live="polite"
+                        >
+                            <p class="acquisition-date-empty">
+                                Process an area to load acquisition dates.
+                            </p>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="scene-analytics-section">
+                <div class="summary-section-heading">
+                    <div>
+                        <span class="section-kicker">Quality Intelligence</span>
+                        <h3>Scene Analytics</h3>
+                    </div>
+                </div>
+
+                <div class="scene-analytics-grid">
+                    <article class="analytics-card">
+                        <span class="analytics-icon green" aria-hidden="true">
+                            ◔
+                        </span>
+                        <div>
+                            <span>Average Scene Cloud</span>
+                            <strong id="average-scene-cloud">—</strong>
+                            <small>Mean cloud cover of accepted scenes</small>
+                        </div>
+                    </article>
+
+                    <article class="analytics-card">
+                        <span class="analytics-icon blue" aria-hidden="true">
+                            ↓
+                        </span>
+                        <div>
+                            <span>Best Scene Cloud</span>
+                            <strong id="best-scene-cloud">—</strong>
+                            <small>Lowest cloud cover observed</small>
+                        </div>
+                    </article>
+
+                    <article class="analytics-card">
+                        <span class="analytics-icon purple" aria-hidden="true">
+                            ↑
+                        </span>
+                        <div>
+                            <span>Worst Scene Cloud</span>
+                            <strong id="worst-scene-cloud">—</strong>
+                            <small>Highest accepted cloud cover</small>
+                        </div>
+                    </article>
+
+                    <article class="analytics-card">
+                        <span class="analytics-icon green" aria-hidden="true">
+                            ✓
+                        </span>
+                        <div>
+                            <span>Images Passed Filter</span>
+                            <strong id="images-passed-filter">—</strong>
+                            <small>Sentinel-2 scenes used</small>
+                        </div>
+                    </article>
+
+                    <article class="analytics-card">
+                        <span class="analytics-icon red" aria-hidden="true">
+                            ×
+                        </span>
+                        <div>
+                            <span>Images Rejected</span>
+                            <strong id="images-rejected">—</strong>
+                            <small>Requires pre-filter scene count</small>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section
+                id="preview-section"
+                class="preview-section"
+                hidden
+            >
+                <div class="preview-header">
+                    <div>
+                        <span class="section-kicker">Optical Composite</span>
+                        <h2>Sentinel-2 Preview</h2>
+                        <p id="preview-information">
+                            Selected satellite image
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        id="open-preview-button"
+                        class="preview-open-button"
+                    >
+                        Open full image
+                    </button>
+                </div>
+
+                <div class="preview-image-container">
+                    <div
+                        id="preview-loading"
+                        class="preview-loading"
+                    >
+                        Loading satellite preview...
+                    </div>
+
+                    <img
+                        id="sentinel-preview"
+                        src=""
+                        alt="Sentinel-2 satellite preview of selected area"
+                    >
+                </div>
+            </section>
+
+            <section
+                id="layer-preview-section"
+                class="layer-preview-section"
+                hidden
+            >
+                <div class="layer-preview-header">
+                    <div>
+                        <p class="section-kicker">
+                            Interactive Earth Engine Tiles
+                        </p>
+
+                        <h2>Layer-by-Layer Preview</h2>
+
+                        <p>
+                            Inspect every layer in the exported
+                            ML-ready GeoTIFF.
+                        </p>
+                    </div>
+
+                    <div class="layer-selector-group">
+                        <label for="layerSelector">
+                            Preview layer
+                        </label>
+
+                        <select id="layerSelector" disabled>
+                            <option value="">
+                                Process an area to load layers
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="layer-preview-dashboard">
+                    <div class="layer-preview-map-panel">
+                        <div
+                            id="layerPreviewMap"
+                            aria-label="Selected Earth Engine layer preview"
+                        ></div>
+                    </div>
+
+                    <aside class="layer-information-panel">
+                        <span
+                            id="selectedLayerType"
+                            class="layer-type-badge"
+                        >
+                            No layer selected
+                        </span>
+
+                        <h3 id="selectedLayerName">
+                            Layer preview unavailable
+                        </h3>
+
+                        <p id="selectedLayerDescription">
+                            Complete processing to inspect the
+                            available image layers.
+                        </p>
+
+                        <div class="layer-information-note">
+                            <strong>Selected area</strong>
+                            <span>
+                                The map is fitted to the polygon or
+                                rectangle drawn on the main map.
+                            </span>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+        </section>
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -281,6 +775,5 @@
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>
-
 </body>
 </html>
