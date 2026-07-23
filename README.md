@@ -2,6 +2,10 @@
 
 A Flask web application for selecting an area on an interactive map, finding suitable Sentinel-2 imagery with Google Earth Engine, and exporting RGB GeoTIFF files to Google Drive.
 
+## Project Preview
+
+![TerraWatch Satellite Monitoring Dashboard](docs/screenshots/terrawatch-dashboard-landscape.png)
+
 ## Current configuration
 
 | Setting | Value |
