@@ -103,13 +103,45 @@
                 >
             </div>
 
-            <button
-                type="button"
-                id="export-button"
-                disabled
-            >
-                Export Sentinel Image
-            </button>
+            <div class="export-destination-group">
+                <label for="exportDestination">
+                    Export Destination
+                </label>
+
+                <select id="exportDestination">
+                    <option value="drive">
+                        Google Drive
+                    </option>
+
+                    <option value="local">
+                        Local Computer
+                    </option>
+
+                    <option value="both" selected>
+                        Google Drive + Local Computer
+                    </option>
+                </select>
+            </div>
+
+            <div class="export-action-group">
+                <button
+                    type="button"
+                    id="export-button"
+                    disabled
+                >
+                    Export Sentinel Image
+                </button>
+
+                <button
+                    type="button"
+                    id="localDownloadButton"
+                    class="local-download-button"
+                    hidden
+                    disabled
+                >
+                    Download GeoTIFF
+                </button>
+            </div>
 
         </section>
 

@@ -119,9 +119,24 @@ def start_sentinel_export(
     coordinates,
     start_date,
     end_date,
-    cloud_percentage=20
+    cloud_percentage=20,
+    export_destination="both"
 ):
     validate_coordinates(coordinates)
+
+    allowed_destinations = {
+        "drive",
+        "local",
+        "both"
+    }
+
+    if (
+        not isinstance(export_destination, str) or
+        export_destination not in allowed_destinations
+    ):
+        raise ValueError(
+            "Export destination must be drive, local, or both."
+        )
 
     if not start_date or not end_date:
         raise ValueError(
@@ -523,29 +538,66 @@ def start_sentinel_export(
     )
 
     # ========================================
-    # 10. GOOGLE DRIVE EXPORT
+    # 10. EXPORT DESTINATIONS
     # ========================================
 
-    task = ee.batch.Export.image.toDrive(
-        image=stacked_image,
-        description=file_name,
-        folder=DRIVE_FOLDER,
-        fileNamePrefix=file_name,
-        region=selected_area,
-        scale=10,
-        fileFormat="GeoTIFF",
-        maxPixels=1e13,
-        formatOptions={
-            "cloudOptimized": True
-        }
-    )
+    drive_task = None
+    drive_task_id = None
+    drive_status = None
+    download_url = None
+    local_download_error = None
 
-    task.start()
+    if export_destination in {"drive", "both"}:
+        drive_task = ee.batch.Export.image.toDrive(
+            image=stacked_image,
+            description=file_name,
+            folder=DRIVE_FOLDER,
+            fileNamePrefix=file_name,
+            region=selected_area,
+            scale=10,
+            fileFormat="GeoTIFF",
+            maxPixels=1e13,
+            formatOptions={
+                "cloudOptimized": True
+            }
+        )
 
-    initial_status = task.status().get(
-        "state",
-        "READY"
-    )
+        drive_task.start()
+
+        drive_task_id = drive_task.id
+        drive_status = drive_task.status().get(
+            "state",
+            "READY"
+        )
+
+    if export_destination in {"local", "both"}:
+        try:
+            download_url = stacked_image.getDownloadURL({
+                "name": file_name,
+                "scale": 10,
+                "region": selected_area,
+                "filePerBand": False,
+                "format": "GEO_TIFF"
+            })
+
+            if not download_url:
+                raise RuntimeError(
+                    "Earth Engine did not return a download URL."
+                )
+
+        except Exception as error:
+            local_download_error = (
+                "The selected area is too large for direct "
+                "download. Please select a smaller area or use "
+                "Google Drive export."
+            )
+
+            print("Local download URL error:", error)
+
+            if export_destination == "local":
+                raise ValueError(
+                    local_download_error
+                ) from error
 
     layer_previews = {}
 
@@ -572,9 +624,19 @@ def start_sentinel_export(
     # 11. TERMINAL OUTPUT
     # ========================================
 
-    print("\nS1 + S2 ML-ready export started!")
-    print("Task ID:", task.id)
-    print("Status:", initial_status)
+    print("\nS1 + S2 ML-ready processing completed!")
+    print("Export destination:", export_destination)
+    print("Drive task ID:", drive_task_id)
+    print("Drive status:", drive_status)
+    print(
+        "Local download URL generated:",
+        bool(download_url)
+    )
+    if local_download_error:
+        print(
+            "Local download error:",
+            local_download_error
+        )
     print("Sentinel-2 images found:", s2_image_count)
     print("Sentinel-1 images found:", s1_image_count)
     print("Start date:", start_date)
@@ -587,7 +649,6 @@ def start_sentinel_export(
         "Exported bands:",
         ", ".join(FINAL_BAND_ORDER)
     )
-    print("Drive folder:", DRIVE_FOLDER)
     print("File name:", f"{file_name}.tif")
 
     # ========================================
@@ -595,9 +656,12 @@ def start_sentinel_export(
     # ========================================
 
     return {
-        "task": task,
-        "task_id": task.id,
-        "status": initial_status,
+        "task": drive_task,
+        "task_id": drive_task_id,
+        "status": drive_status or "DOWNLOAD_READY",
+        "export_destination": export_destination,
+        "download_url": download_url,
+        "local_download_error": local_download_error,
 
         # Existing frontend compatibility
         "image_count": s2_image_count,
@@ -622,5 +686,9 @@ def start_sentinel_export(
 
         # Export information
         "file_name": f"{file_name}.tif",
-        "drive_folder": DRIVE_FOLDER
+        "drive_folder": (
+            DRIVE_FOLDER
+            if export_destination in {"drive", "both"}
+            else None
+        )
     }

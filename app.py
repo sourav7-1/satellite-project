@@ -35,6 +35,25 @@ def process_area():
         start_date = data.get("start_date")
         end_date = data.get("end_date")
         cloud_percentage = data.get("cloud_percentage", 20)
+        export_destination = data.get(
+            "export_destination",
+            "both"
+        )
+
+        allowed_destinations = {
+            "drive",
+            "local",
+            "both"
+        }
+
+        if (
+            not isinstance(export_destination, str) or
+            export_destination not in allowed_destinations
+        ):
+            return jsonify({
+                "success": False,
+                "message": "Invalid export destination."
+            }), 400
 
         if not coordinates:
             return jsonify({
@@ -66,7 +85,8 @@ def process_area():
             coordinates=coordinates,
             start_date=start_date,
             end_date=end_date,
-            cloud_percentage=cloud_percentage
+            cloud_percentage=cloud_percentage,
+            export_destination=export_destination
         )
 
         task = result.pop("task", None)
@@ -74,12 +94,35 @@ def process_area():
         if task is not None:
             active_tasks[task.id] = task
 
+        success_messages = {
+            "drive": (
+                "Google Drive export started successfully."
+            ),
+            "local": (
+                "Local GeoTIFF download is ready."
+            ),
+            "both": (
+                "Google Drive export started and local "
+                "download is ready."
+            )
+        }
+
+        success_message = success_messages[
+            export_destination
+        ]
+
+        if (
+            export_destination == "both" and
+            result.get("local_download_error")
+        ):
+            success_message = (
+                "Google Drive export started, but the local "
+                "download could not be prepared."
+            )
+
         return jsonify({
             "success": True,
-            "message": (
-                "S1 + S2 ML-ready 10-band export "
-                "started successfully."
-            ),
+            "message": success_message,
             **result
         })
 

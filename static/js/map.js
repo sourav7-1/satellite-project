@@ -85,10 +85,17 @@ let statusInterval = null;
 let layerPreviewMap = null;
 let currentPreviewLayer = null;
 let availableLayerPreviews = {};
+let localGeoTiffDownloadUrl = null;
 
 
 const exportButton =
     document.getElementById("export-button");
+
+const exportDestinationSelect =
+    document.getElementById("exportDestination");
+
+const localDownloadButton =
+    document.getElementById("localDownloadButton");
 
 const coordinatesOutput =
     document.getElementById("coordinates");
@@ -128,6 +135,47 @@ const selectedLayerName =
 
 const selectedLayerDescription =
     document.getElementById("selectedLayerDescription");
+
+
+function resetLocalDownloadButton() {
+    const button = document.getElementById(
+        "localDownloadButton"
+    );
+
+    localGeoTiffDownloadUrl = null;
+
+    if (button) {
+        button.hidden = true;
+        button.disabled = true;
+    }
+}
+
+
+function triggerLocalGeoTiffDownload() {
+    if (!localGeoTiffDownloadUrl) {
+        return;
+    }
+
+    const temporaryLink = document.createElement("a");
+
+    temporaryLink.href = localGeoTiffDownloadUrl;
+    temporaryLink.target = "_blank";
+    temporaryLink.rel = "noopener noreferrer";
+
+    document.body.appendChild(temporaryLink);
+    temporaryLink.click();
+    temporaryLink.remove();
+}
+
+
+function escapeHtml(value) {
+    const temporaryElement =
+        document.createElement("div");
+
+    temporaryElement.textContent = String(value);
+
+    return temporaryElement.innerHTML;
+}
 
 
 function initializeLayerPreviewMap() {
@@ -461,6 +509,7 @@ function updateSelectedCoordinates(layer) {
     resultDetails.innerHTML = "";
 
     resetLayerPreview();
+    resetLocalDownloadButton();
 
     console.log(
         "Selected coordinates:",
@@ -512,6 +561,7 @@ map.on(
         resetPreview();
 
         resetLayerPreview();
+        resetLocalDownloadButton();
 
         if (statusInterval) {
             clearInterval(statusInterval);
@@ -587,6 +637,9 @@ async function exportSentinelImage() {
             "drive-folder"
         ).value.trim();
 
+    const exportDestination =
+        exportDestinationSelect.value;
+
 
     if (!startDate || !endDate) {
         updateStatus(
@@ -621,6 +674,11 @@ async function exportSentinelImage() {
     }
 
 
+    if (statusInterval) {
+        clearInterval(statusInterval);
+        statusInterval = null;
+    }
+
     exportButton.disabled = true;
 
     resultDetails.innerHTML = "";
@@ -628,6 +686,7 @@ async function exportSentinelImage() {
     resetPreview();
 
     resetLayerPreview();
+    resetLocalDownloadButton();
 
     updateStatus(
         "Searching Sentinel-2 images...",
@@ -650,6 +709,7 @@ async function exportSentinelImage() {
                     start_date: startDate,
                     end_date: endDate,
                     cloud_percentage: cloudPercentage,
+                    export_destination: exportDestination,
                     image_type: imageType,
                     drive_folder:
                         driveFolder || "Sentinel_Images"
@@ -670,10 +730,25 @@ async function exportSentinelImage() {
         }
 
 
-        updateStatus(
-            `Export task started: ${data.status || "READY"}`,
-            "processing"
-        );
+        const responseDestination =
+            data.export_destination || exportDestination;
+
+        if (data.download_url) {
+            localGeoTiffDownloadUrl = data.download_url;
+
+            localDownloadButton.hidden = false;
+            localDownloadButton.disabled = false;
+
+            if (responseDestination === "local") {
+                setTimeout(
+                    triggerLocalGeoTiffDownload,
+                    500
+                );
+            }
+
+        } else {
+            resetLocalDownloadButton();
+        }
 
 
         showResultDetails(data);
@@ -683,7 +758,22 @@ async function exportSentinelImage() {
         loadLayerPreviews(data.layer_previews);
 
         if (data.task_id) {
+            updateStatus(
+                `Export task started: ${data.status || "READY"}`,
+                "processing"
+            );
+
             startTaskMonitoring(data.task_id);
+
+        } else if (responseDestination === "local") {
+            updateStatus(
+                data.message ||
+                "Local GeoTIFF download is ready.",
+                "success"
+            );
+
+            exportButton.disabled = false;
+
         } else {
             throw new Error(
                 "Task ID was not returned by the server."
@@ -726,6 +816,31 @@ function showResultDetails(data) {
     const bandCount =
         data.band_count ?? "Not available";
 
+    const destinationLabels = {
+        drive: "Google Drive",
+        local: "Local Computer",
+        both: "Google Drive + Local Computer"
+    };
+
+    const exportDestination =
+        destinationLabels[data.export_destination] ||
+        "Not available";
+
+    const driveFolder =
+        data.drive_folder ?? "Not applicable";
+
+    const localDownloadErrorRow =
+        data.local_download_error
+            ? `
+                <div class="result-row local-download-error">
+                    <span>Local download</span>
+                    <strong>
+                        ${escapeHtml(data.local_download_error)}
+                    </strong>
+                </div>
+            `
+            : "";
+
     resultDetails.innerHTML = `
         <div class="result-row">
             <span>Images found</span>
@@ -740,6 +855,11 @@ function showResultDetails(data) {
         <div class="result-row">
             <span>Cloud percentage</span>
             <strong>${cloudText}</strong>
+        </div>
+
+        <div class="result-row">
+            <span>Destination</span>
+            <strong>${exportDestination}</strong>
         </div>
 
         <div class="result-row">
@@ -760,7 +880,7 @@ function showResultDetails(data) {
         <div class="result-row">
             <span>Drive folder</span>
             <strong>
-                ${data.drive_folder || "Sentinel_Images"}
+                ${driveFolder}
             </strong>
         </div>
 
@@ -768,6 +888,8 @@ function showResultDetails(data) {
             <span>File name</span>
             <strong>${data.file_name || "Not available"}</strong>
         </div>
+
+        ${localDownloadErrorRow}
     `;
 }
 
@@ -901,4 +1023,16 @@ layerSelector.addEventListener(
     function () {
         showPreviewLayer(layerSelector.value);
     }
+);
+
+
+localDownloadButton?.addEventListener(
+    "click",
+    triggerLocalGeoTiffDownload
+);
+
+
+exportDestinationSelect.addEventListener(
+    "change",
+    resetLocalDownloadButton
 );
